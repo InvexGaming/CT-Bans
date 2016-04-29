@@ -501,25 +501,26 @@ public Action:Command_CTBan_RemoteUpdate(client, args)
   
   //Check if user matching steamID is in the server
   for (int i = 1; i < MaxClients; ++i) {
-    decl String:sSteamID[32];
-    GetClientAuthId(i, AuthId_Steam2, sSteamID, sizeof(sSteamID));
-    
-    if (StrEqual(sProvidedSteamId, sSteamID, false)) {
-      #if DEBUG == 1
-      LogMessage("Remote update for client %N with SteamID: %s", i, sSteamID);
-      #endif
-    
-      //User is in game, update local variables to match database
-      #if USESQL == 1
-      // check if the Steam ID is in the Timed Ban list
-      decl String:query[255];
-      Format(query, sizeof(query), "SELECT COALESCE(sum(timeleft), 0), COALESCE(bantime, -1) FROM %s WHERE perp_steamid = '%s' AND timeleft >= 0", g_sLogTableName, sSteamID);
-      SQL_TQuery(gH_BanDatabase, DB_Callback_OnClientAuthed, query, _:i); //uses DB_Callback_OnClientAuthed
-      #endif
+    if (IsClientInGame(i)) {
+      decl String:sSteamID[32];
+      GetClientAuthId(i, AuthId_Steam2, sSteamID, sizeof(sSteamID));
       
-      break;
+      if (StrEqual(sProvidedSteamId, sSteamID, false)) {
+        #if DEBUG == 1
+        LogMessage("Remote update for client %N with SteamID: %s", i, sSteamID);
+        #endif
+      
+        //User is in game, update local variables to match database
+        #if USESQL == 1
+        // check if the Steam ID is in the Timed Ban list
+        decl String:query[255];
+        Format(query, sizeof(query), "SELECT COALESCE(sum(timeleft), 0), COALESCE(bantime, -1) FROM %s WHERE perp_steamid = '%s' AND timeleft >= 0", g_sLogTableName, sSteamID);
+        SQL_TQuery(gH_BanDatabase, DB_Callback_OnClientAuthed, query, _:i); //uses DB_Callback_OnClientAuthed
+        #endif
+        
+        break;
+      }
     }
-  
   }
   
   return Plugin_Handled;
