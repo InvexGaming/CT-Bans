@@ -135,7 +135,7 @@ public OnPluginStart()
   g_CT_Cookie = RegClientCookie("Banned_From_CT", "Tells if you are restricted from joining the CT team", CookieAccess_Protected);
 
   RegAdminCmd("sm_ctban", Command_CTBan, ADMFLAG_SLAY, "sm_ctban <player> <optional: time> - Bans a player from being a CT.");
-  RegAdminCmd("sm_isbanned", Command_IsCTBanned, ADMFLAG_GENERIC, "sm_isbanned <player> - Lets you know if a player is banned from CT team.");
+  RegConsoleCmd("sm_isbanned", Command_IsCTBanned, "sm_isbanned <player> - Lets you know if a player is banned from CT team.");
   RegAdminCmd("sm_removectban", Command_UnCTBan, ADMFLAG_SLAY, "sm_removectban <player> - Unrestricts a player from being a CT.");
   RegAdminCmd("sm_unctban", Command_UnCTBan, ADMFLAG_SLAY, "sm_unctban <player> - Unrestricts a player from being a CT.");
   RegAdminCmd("sm_rageban", Command_RageBan, ADMFLAG_SLAY, "sm_rageban <player> - Allows you to ban those who rage quit.");
@@ -1450,7 +1450,7 @@ public Action:Command_IsCTBanned(client, args)
     GetCmdArg(1, target, sizeof(target));
     
     decl String:clientName[MAX_TARGET_LENGTH], target_list[MAXPLAYERS], target_count, bool:tn_is_ml;
-    target_count = ProcessTargetString(target, client, target_list, MAXPLAYERS, 0, clientName, sizeof(clientName), tn_is_ml);
+    target_count = ProcessTargetString(target, 0, target_list, MAXPLAYERS, 0, clientName, sizeof(clientName), tn_is_ml);
     // make sure we have exactly one target here
     if (target_count != 1) 
     {
