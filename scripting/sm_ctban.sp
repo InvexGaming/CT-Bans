@@ -78,7 +78,7 @@
 #include <adminmenu>
 #include <cstrike>
 
-#define PLUGIN_VERSION "1.6.1.3 - BYTE"
+#define PLUGIN_VERSION "1.6.1.4 - BYTE"
 
 // compilation settings:
 // (set DEBUG and OCAOFF to 1 for best debugging results)
@@ -124,11 +124,11 @@ public Plugin:myinfo =
 public OnPluginStart()
 {
   CreateConVar("sm_ctban_version", PLUGIN_VERSION, "CT Ban Version", FCVAR_SPONLY|FCVAR_DONTRECORD|FCVAR_REPLICATED|FCVAR_NOTIFY);
-  gH_Cvar_Enabled = CreateConVar("sm_ctban_enable","1","Enables CT bans cookie handling", FCVAR_PLUGIN);
-  gH_Cvar_SoundName = CreateConVar("sm_ctban_soundfile", "buttons/button11.wav", "The name of the sound to play when an action is denied",FCVAR_PLUGIN);
-  gH_Cvar_JoinBanMessage = CreateConVar("sm_ctban_joinbanmsg", "To appeal this go to VintageJailbreak.org", "This text is appended to the time the user was last CT banned when they join T or Spectator teams.", FCVAR_PLUGIN);
-  gH_Cvar_Table_Prefix = CreateConVar("sm_ctban_table_prefix", "", "Adds a prefix to the CT Bans table, leave this blank unless you have a need to add a prefix for multiple servers on one database.", FCVAR_PLUGIN);
-  gH_Cvar_Database_Driver = CreateConVar("sm_ctban_database_driver", "default", "Specifies the configuration driver to use from SourceMod's database.cfg", FCVAR_PLUGIN);
+  gH_Cvar_Enabled = CreateConVar("sm_ctban_enable","1","Enables CT bans cookie handling");
+  gH_Cvar_SoundName = CreateConVar("sm_ctban_soundfile", "buttons/button11.wav", "The name of the sound to play when an action is denied");
+  gH_Cvar_JoinBanMessage = CreateConVar("sm_ctban_joinbanmsg", "To appeal this go to VintageJailbreak.org", "This text is appended to the time the user was last CT banned when they join T or Spectator teams.");
+  gH_Cvar_Table_Prefix = CreateConVar("sm_ctban_table_prefix", "", "Adds a prefix to the CT Bans table, leave this blank unless you have a need to add a prefix for multiple servers on one database.");
+  gH_Cvar_Database_Driver = CreateConVar("sm_ctban_database_driver", "default", "Specifies the configuration driver to use from SourceMod's database.cfg");
 
   AutoExecConfig(true, "ctban");
 
@@ -205,12 +205,14 @@ public OnClientAuthorized(client, const String:sSteamID[])
   #endif
   
   #if USESQL == 1
-  // check if the Steam ID is in the Timed Ban list
-  decl String:query[255];
-  //Used to be: SELECT ctbantime FROM %s WHERE steamid = '%s'
-  Format(query, sizeof(query), "SELECT COALESCE(sum(timeleft), 0), COALESCE(bantime, -1) FROM %s WHERE perp_steamid = '%s' AND timeleft >= 0", g_sLogTableName, sSteamID);
-  SQL_TQuery(gH_BanDatabase, DB_Callback_OnClientAuthed, query, _:client);
-
+  if (gH_BanDatabase != INVALID_HANDLE) {
+    // check if the Steam ID is in the Timed Ban list
+    decl String:query[255];
+    //Used to be: SELECT ctbantime FROM %s WHERE steamid = '%s'
+    Format(query, sizeof(query), "SELECT COALESCE(sum(timeleft), 0), COALESCE(bantime, -1) FROM %s WHERE perp_steamid = '%s' AND timeleft >= 0", g_sLogTableName, sSteamID);
+    SQL_TQuery(gH_BanDatabase, DB_Callback_OnClientAuthed, query, _:client);
+  }
+  
   #else
   
   new iSteamArrayIndex = FindStringInArray(gA_TimedBanSteamList, sSteamID);
