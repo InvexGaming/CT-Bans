@@ -502,7 +502,7 @@ public Action:Command_CTBan_RemoteUpdate(client, args)
   }
   
   //Check if user matching steamID is in the server
-  for (int i = 1; i < MaxClients; ++i) {
+  for (int i = 1; i <= MaxClients; ++i) {
     if (IsClientInGame(i)) {
       decl String:sSteamID[32];
       GetClientAuthId(i, AuthId_Steam2, sSteamID, sizeof(sSteamID));
