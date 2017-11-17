@@ -128,7 +128,7 @@
 // Compilation Settings
 //#define CTBAN_DEBUG
 
-#define PLUGIN_VERSION "2.0.3"
+#define PLUGIN_VERSION "2.0.3 - BYTE"
 
 #include <sourcemod>
 #include <clientprefs>
@@ -436,6 +436,7 @@ public void OnPluginStart()
 	RegAdminCmd(UNFORCECT_COMMAND, Command_UnForceCT, UNFORCECT_ADMIN_LEVEL, "sm_unforcect <player> - Removes any temporary overrides and removes player from CT team.");
 	RegAdminCmd("sm_isbanned_offline", Command_Offline_IsBanned, ADMFLAG_SLAY, "sm_isbanned_offline <steamid> - Allows admins to get CT Ban information on offline players user their Steam Id.");
 	RegAdminCmd("sm_change_ctban_time", Command_Change_CTBan_Time, ADMFLAG_KICK, "sm_change_ctban_time <player> <time> - Allows the admin to change the time remaining for an existing CTBan.");
+	RegAdminCmd("sm_ctban_remoteupdate", Command_CTBan_RemoteUpdate, ADMFLAG_ROOT, "sm_ctban_remoteupdate <steamid> - Allows CT ban information to be updated to match database."); //custom edit
 
 	LoadTranslations("ctban.phrases");
 	LoadTranslations("common.phrases");
@@ -2250,7 +2251,7 @@ void DisplayCTBanPlayerMenu(int iClient)
 	// filter away those with current CTBans
 	for (int iIndex = ONE; iIndex <= MaxClients; iIndex++)
 	{
-		if (IsClientInGame(iIndex))
+		if (IsClientInGame(iIndex) && !IsFakeClient(iIndex)) //byte added fake client check
 		{
 			if (!GetCTBanStatus(iIndex))
 			{
@@ -3177,6 +3178,98 @@ void PerformChangeCTBanTime(int iTarget, int iClient, int iTime)
 		SQL_TQuery(gH_BanDatabase, DB_Callback_DisconnectAction, sQuery);
 
 		ShowActivity2(iClient, "", g_sChatBanner, "Temporary CT Ban", iTarget, iTime);
+	}
+}
+
+//Custom Byte Edits
+public Action Command_CTBan_RemoteUpdate(int iClient, int iArgs)
+{
+	if (iArgs != 1)
+		return Plugin_Handled;
+	
+	if (!g_bAuthIdNativeExists)
+	{
+		ReplyToCommand(iClient, g_sChatBanner, "Feature Not Available");
+	}
+	
+	char providedSteamId[32];
+	GetCmdArg(1, providedSteamId, sizeof(providedSteamId));
+	StripQuotes(providedSteamId);
+	for (int iIndex = 1; iIndex <= MaxClients; iIndex++)
+	{
+		if (!IsClientInGame(iIndex) || IsFakeClient(iIndex) || !IsClientAuthorized(iIndex))
+			continue;
+		
+		char steamId[32];
+		GetClientAuthId(iIndex, AuthId_Steam2, steamId, sizeof(steamId));
+		
+		if (StrEqual(providedSteamId, steamId, false)) {
+			char sQuery[QUERY_MAXLENGTH];
+			Format(sQuery, sizeof(sQuery), "SELECT COALESCE(sum(timeleft), 0), COALESCE(bantime, -1) FROM %s WHERE perp_steamid = '%s' AND timeleft >= 0", g_sLogTableName, steamId);
+			SQL_TQuery(gH_BanDatabase, DB_Callback_RemoteUpdate, sQuery, view_as<int>(iIndex));
+		}
+	}
+	
+	return Plugin_Handled;
+}
+
+public void DB_Callback_RemoteUpdate(Handle hOwner, Handle hCallback, const char[] sError, any iClient)
+{
+	if (hCallback == INVALID_HANDLE)
+	{
+		LogError("Error in RemoteUpdate query: %s", sError);
+	}
+	else
+	{
+		int iRowCount = SQL_GetRowCount(hCallback);
+		
+		if (iRowCount)
+		{
+			SQL_FetchRow(hCallback);
+			int iBanTimeRemaining = SQL_FetchInt(hCallback, 0);
+			int iBanTime = SQL_FetchInt(hCallback, 1);
+			
+			//Update ban time remaining
+			gA_LocalTimeRemaining[iClient] = iBanTimeRemaining;
+			
+			if (IsClientInGame(iClient) && !IsFakeClient(iClient)) {
+				if (iBanTime == 0) {
+					//Permanent ban
+					int iBannedArrayIndex = FindValueInArray(gA_TimedBanLocalList, iClient);
+					if (iBannedArrayIndex != -1)
+						RemoveFromArray(gA_TimedBanLocalList, iBannedArrayIndex);
+					
+					//Ensure the ban cookie exists
+					SetClientCookie(iClient, g_CT_Cookie, COOKIE_BANNED_STRING);
+				}
+				else if (iBanTimeRemaining > 0) {
+					//Ban has time left still
+					int iBannedArrayIndex = FindValueInArray(gA_TimedBanLocalList, iClient);
+					
+					//If entry does not exist (even though it should), add it in
+					if (iBannedArrayIndex == -1)
+						PushArrayCell(gA_TimedBanLocalList, iClient);
+					
+					//Ensure the ban cookie exists
+					SetClientCookie(iClient, g_CT_Cookie, COOKIE_BANNED_STRING);
+				}
+				else { //iBanTimeRemaining <= 0
+					//Expired ban
+					int iBannedArrayIndex = FindValueInArray(gA_TimedBanLocalList, iClient);
+					if (iBannedArrayIndex != VALUE_NOT_FOUND_IN_ARRAY)
+					{
+						// remove them from the local array
+						RemoveFromArray(gA_TimedBanLocalList, iBannedArrayIndex);
+					}
+					
+					//Remove ban from cookie
+					SetClientCookie(iClient, g_CT_Cookie, COOKIE_UNBANNED_STRING);
+				}
+				
+				//Finally, handle team swapping if banned
+				ProcessBanCookies(iClient);
+			}
+		}
 	}
 }
 
