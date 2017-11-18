@@ -320,6 +320,8 @@
 #define CTBAN_QUERY_LOG_PERM_TO_TIME_MYSQL	"UPDATE %s SET (bantime, timeleft) VALUES (%d, %d) WHERE perp_steamid = '%s' AND timeleft = 0 AND bantime = 0"
 #define CTBAN_QUERY_LOG_PERM_TO_TIME_SQLITE	"UPDATE %s SET bantime = %d, timeleft = %d WHERE perp_steamid = '%s' AND timeleft = 0 AND bantime = 0"
 
+#define CTBAN_QUERY_BANTIME_BANTIMEREMAINING_BYTE "SELECT COALESCE(sum(timeleft), 0), COALESCE(bantime, -1) FROM %s WHERE perp_steamid = '%s' AND timeleft >= 0"
+
 #pragma semicolon 1
 #pragma newdecls required
 
@@ -2485,9 +2487,41 @@ public void OnClientConnected(int iClient)
 	g_bA_Temp_CTBan_Override[iClient] = false;
 }
 
+//Byte Edits: Handles invalid cookies being set when bans changed off server
 public void OnClientPostAdminCheck(int iClient)
 {
-	CreateTimer(COOKIE_INIT_CHECK_TIME, Timer_CheckBanCookies, iClient, TIMER_FLAG_NO_MAPCHANGE);
+	// check if we have a database connection
+	if (gH_BanDatabase != INVALID_HANDLE)
+	{
+		char sAuthID[FIELD_AUTHID_MAXLENGTH];
+		GetClientAuthId(iClient, AuthId_Steam2, sAuthID, sizeof(sAuthID));
+
+		char sQuery[QUERY_MAXLENGTH];
+		Format(sQuery, sizeof(sQuery), CTBAN_QUERY_BANTIME_BANTIMEREMAINING_BYTE, g_sLogTableName, sAuthID);
+		SQL_TQuery(gH_BanDatabase, DB_Callback_RemoteUpdate, sQuery, view_as<int>(iClient));
+	}
+	else
+	{
+		CreateTimer(AUTH_RESCAN_TIME, Timer_OnClientPostAdminCheck, iClient, TIMER_FLAG_NO_MAPCHANGE);
+	}
+}
+
+//Byte edits
+public Action Timer_OnClientPostAdminCheck(Handle hTimer, any iClient)
+{
+	if (gH_BanDatabase != INVALID_HANDLE && IsClientInGame(iClient))
+	{
+		char sAuthID[FIELD_AUTHID_MAXLENGTH];
+		GetClientAuthId(iClient, AuthId_Steam2, sAuthID, sizeof(sAuthID));
+
+		char sQuery[QUERY_MAXLENGTH];
+		Format(sQuery, sizeof(sQuery), CTBAN_QUERY_BANTIME_BANTIMEREMAINING_BYTE, g_sLogTableName, sAuthID);
+		SQL_TQuery(gH_BanDatabase, DB_Callback_RemoteUpdate, sQuery, view_as<int>(iClient));
+	}
+	else if(IsClientInGame(iClient))
+	{
+		CreateTimer(AUTH_RESCAN_TIME, Timer_OnClientPostAdminCheck, iClient, TIMER_FLAG_NO_MAPCHANGE);
+	}
 }
 
 public void OnClientDisconnect(int iClient)
@@ -3205,7 +3239,7 @@ public Action Command_CTBan_RemoteUpdate(int iClient, int iArgs)
 		
 		if (StrEqual(providedSteamId, steamId, false)) {
 			char sQuery[QUERY_MAXLENGTH];
-			Format(sQuery, sizeof(sQuery), "SELECT COALESCE(sum(timeleft), 0), COALESCE(bantime, -1) FROM %s WHERE perp_steamid = '%s' AND timeleft >= 0", g_sLogTableName, steamId);
+			Format(sQuery, sizeof(sQuery), CTBAN_QUERY_BANTIME_BANTIMEREMAINING_BYTE, g_sLogTableName, steamId);
 			SQL_TQuery(gH_BanDatabase, DB_Callback_RemoteUpdate, sQuery, view_as<int>(iIndex));
 		}
 	}
@@ -3267,7 +3301,7 @@ public void DB_Callback_RemoteUpdate(Handle hOwner, Handle hCallback, const char
 				}
 				
 				//Finally, handle team swapping if banned
-				ProcessBanCookies(iClient);
+				CreateTimer(COOKIE_INIT_CHECK_TIME, Timer_CheckBanCookies, iClient, TIMER_FLAG_NO_MAPCHANGE);
 			}
 		}
 	}
